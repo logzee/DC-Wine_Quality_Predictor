@@ -3,6 +3,7 @@ import pandas as pd
 from sklearn.feature_extraction.text import CountVectorizer, TfidfVectorizer
 from sklearn.model_selection import train_test_split
 from sklearn.metrics import confusion_matrix, classification_report
+import sklearn
 import nltk
 
 path = '/Users/alinajam/Desktop/winemag-data-130k-v2.csv'
