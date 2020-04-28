@@ -6,15 +6,18 @@ from nltk import word_tokenize
 from nltk import WordNetLemmatizer
 from nltk import SnowballStemmer
 from sklearn.feature_extraction.text import TfidfVectorizer
+from sklearn.metrics import classification_report, mean_squared_error
 from sklearn.naive_bayes import MultinomialNB
+from sklearn.linear_model import LinearRegression
 
 fullData = pd.read_csv('winemag-data-130k-v2.csv')
+fullData = fullData.drop(columns={'country', 'designation', 'price', 'province', 'region_1', 'region_2', 'taster_name', 'taster_twitter_handle', 'title', 'variety', 'winery'})
 fullData = fullData.dropna()
 
-fullDescriptions = fullData.get('description').copy()
+fullDescriptions = fullData.loc[:, 'description'].copy()
+fullLabels = fullData.loc[:, 'points'].copy()
 
-fullLabels = fullData.get('points').copy()
-
+fullLabels_continuous = fullLabels.copy()
 
 def clean_text(unprocessed_string):
     stop_words = stopwords.words()
@@ -46,30 +49,49 @@ def stematize_sentence(sentence):
 
 
 for index in range(len(fullDescriptions)):
+    print(index / len(fullDescriptions))
+    # cleaning text
     review = fullDescriptions.iloc[index]
     processed_sentence = clean_text(review)
     processed_sentence = stematize_sentence(processed_sentence)
     fullDescriptions.iloc[index] = processed_sentence
 
+    # updating scores
+    points = fullLabels.iloc[index]
+    if points < 84:
+        fullLabels.iloc[index] = 1
+    elif 84 <= points < 88:
+        fullLabels.iloc[index] = 2
+    elif 88 <= points < 92:
+        fullLabels.iloc[index] = 3
+    elif 92 <= points < 96:
+        fullLabels.iloc[index] = 4
+    else:
+        fullLabels.iloc[index] = 5
+
 Vectorizer = TfidfVectorizer()
-splitIndex = np.round(len(fullDescriptions) * .8)
+
+splitIndex = round(len(fullDescriptions) * .75)
 endIndex = len(fullDescriptions)
 
-print(type(fullDescriptions))
+trainingData = fullDescriptions.iloc[0:splitIndex]
+testData = fullDescriptions.iloc[splitIndex+1:endIndex]
 
-trainFeatures = Vectorizer.fit_transform(fullDescriptions.iloc[0:splitIndex])
-testFeatures = Vectorizer.transform(fullDescriptions.iloc[splitIndex+1:endIndex])
+Vectorizer.fit(trainingData)
+trainFeatures = Vectorizer.transform(trainingData)
+testFeatures = Vectorizer.transform(testData)
 
 trainLabels = fullLabels.iloc[0:splitIndex]
+trainLabels_continuous = fullLabels_continuous.iloc[0:splitIndex]
 testLabels = fullLabels.iloc[splitIndex+1:endIndex]
+testLabels_continuous = fullLabels_continuous.iloc[splitIndex+1:endIndex]
 
 multinomialNB = MultinomialNB()
 multinomialNB.fit(trainFeatures, trainLabels)
-
 predictions = multinomialNB.predict(testFeatures)
-errorNums = []
-for pred_index in range(len(predictions)):
-    prediction_error = predictions[pred_index] - testLabels.iloc[pred_index]
-    errorNums.append(prediction_error)
+print('Multinomial Naive Bayes Statistics: ', classification_report(testLabels, predictions))
 
-print('Average point error: ', np.sum(errorNums) / len(errorNums))
+linReg = LinearRegression()
+linReg.fit(trainFeatures, trainLabels_continuous)
+predictions = linReg.predict(testFeatures)
+print('Linear Regression Statistics: ', mean_squared_error(testLabels_continuous, predictions))
