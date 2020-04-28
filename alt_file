@@ -1,0 +1,75 @@
+import string
+import pandas as pd
+import numpy as np
+from nltk.corpus import stopwords
+from nltk import word_tokenize
+from nltk import WordNetLemmatizer
+from nltk import SnowballStemmer
+from sklearn.feature_extraction.text import TfidfVectorizer
+from sklearn.naive_bayes import MultinomialNB
+
+fullData = pd.read_csv('winemag-data-130k-v2.csv')
+fullData = fullData.dropna()
+
+fullDescriptions = fullData.get('description').copy()
+
+fullLabels = fullData.get('points').copy()
+
+
+def clean_text(unprocessed_string):
+    stop_words = stopwords.words()
+    cleaned_text = ""
+    unprocessed_string = np.str.lower(unprocessed_string)
+    unprocessed_string = np.str.replace(unprocessed_string, "'", "")
+
+    text_tokens = word_tokenize(unprocessed_string)
+    for word in text_tokens:
+        if word not in string.punctuation:
+            if word not in stop_words:
+                if len(word) > 1:
+                    cleaned_text = cleaned_text + " " + word
+    cleaned_text = ("").join(cleaned_text)
+    return cleaned_text
+
+
+def stematize_sentence(sentence):
+    sb_stemmer = SnowballStemmer('english')
+    wordnet_lemmatizer = WordNetLemmatizer()
+
+    token_words = word_tokenize(sentence)
+    stem_sentence = []
+    for word in token_words:
+        lem_word = wordnet_lemmatizer.lemmatize(word)
+        stem_sentence.append(sb_stemmer.stem(lem_word))
+        stem_sentence.append(" ")
+    return "".join(stem_sentence)
+
+
+for index in range(len(fullDescriptions)):
+    review = fullDescriptions.iloc[index]
+    processed_sentence = clean_text(review)
+    processed_sentence = stematize_sentence(processed_sentence)
+    fullDescriptions.iloc[index] = processed_sentence
+
+Vectorizer = TfidfVectorizer()
+splitIndex = np.round(len(fullDescriptions) * .8)
+endIndex = len(fullDescriptions)
+
+print(type(fullDescriptions))
+
+trainFeatures = Vectorizer.fit_transform(fullDescriptions.iloc[0:splitIndex])
+testFeatures = Vectorizer.transform(fullDescriptions.iloc[splitIndex+1:endIndex])
+
+trainLabels = fullLabels.iloc[0:splitIndex]
+testLabels = fullLabels.iloc[splitIndex+1:endIndex]
+
+multinomialNB = MultinomialNB()
+multinomialNB.fit(trainFeatures, trainLabels)
+
+predictions = multinomialNB.predict(testFeatures)
+errorNums = []
+for pred_index in range(len(predictions)):
+    prediction_error = predictions[pred_index] - testLabels.iloc[pred_index]
+    errorNums.append(prediction_error)
+
+print('Average point error: ', np.sum(errorNums) / len(errorNums))
